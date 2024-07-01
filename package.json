@@ -1,0 +1,68 @@
+{
+  "name": "vite-plugin-auto-update-packages",
+  "version": "0.0.1",
+  "description": "A vite plugin that will auto-install deps whenever the package lock changed",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": "^18 || ^20 || >=22"
+  },
+  "scripts": {
+    "dev": "tsup --watch",
+    "build": "tsup",
+    "lint": "eslint --cache .",
+    "type-check": "tsc --noEmit",
+    "test": "vitest",
+    "coverage": "vitest run --coverage",
+    "prepare": "husky"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/atlowChemi/vite-plugin-auto-update-packages.git"
+  },
+  "keywords": [
+    "npm",
+    "vite",
+    "install",
+    "update",
+    "auto-update"
+  ],
+  "author": "atlowChemi",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/atlowChemi/vite-plugin-auto-update-packages/issues"
+  },
+  "homepage": "https://github.com/atlowChemi/vite-plugin-auto-update-packages#readme",
+  "peerDependencies": {
+    "vite": "^3.0.0 || ^4.0.0 || ^5.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.5.0",
+    "@stylistic/eslint-plugin": "^2.3.0",
+    "@types/eslint__js": "^8.42.3",
+    "@types/node": "^18",
+    "@vitest/coverage-istanbul": "^1.6.0",
+    "eslint": "^9.5.0",
+    "eslint-config-prettier": "^9.1.0",
+    "husky": "^9.0.11",
+    "tsup": "^8.1.0",
+    "typescript": "^5.5.2",
+    "typescript-eslint": "^8.0.0-alpha.34",
+    "vite": "^5.3.2",
+    "vitest": "^1.6.0"
+  }
+}
