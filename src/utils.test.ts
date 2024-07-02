@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as childProcess from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { Utils, type SupportedPkgManager, type WatcherArgs } from './utils';
+import type { ViteDevServer } from 'vite';
 
 const baseOptions: WatcherArgs = { cacheDir: '', pkgLockPath: '', pkgManager: 'npm', signal: new AbortController().signal };
 
@@ -40,6 +41,8 @@ describe('utils', () => {
 
     describe('handlePackageLockUpdates', () => {
         let utils: Utils;
+        const restart = vi.fn();
+        const devServer = { restart } as unknown as ViteDevServer;
         let setupWatcher: MockInstance<Parameters<typeof Utils.prototype['setupWatcher']>, ReturnType<typeof Utils.prototype['setupWatcher']>>;
         let doesFileExist: MockInstance<Parameters<typeof Utils.prototype['doesFileExist']>, ReturnType<typeof Utils.prototype['doesFileExist']>>;
         let getBufferHash: MockInstance<Parameters<typeof Utils.prototype['getBufferHash']>, ReturnType<typeof Utils.prototype['getBufferHash']>>;
@@ -58,10 +61,11 @@ describe('utils', () => {
         it('handles missing cache', async () => {
             doesFileExist.mockResolvedValueOnce(false);
             vi.mocked(fs.readFile).mockResolvedValueOnce('lock-content');
-            await utils.handlePackageLockUpdates();
+            await utils.handlePackageLockUpdates(devServer);
             expect(doesFileExist).toHaveBeenCalledOnce();
             expect(getBufferHash).toHaveBeenCalledOnce();
             expect(installPackagesAndWriteHash).toHaveBeenCalledOnce();
+            expect(restart).toHaveBeenCalledWith(true);
             expect(setupWatcher).toHaveBeenCalledOnce();
         });
 
@@ -73,6 +77,7 @@ describe('utils', () => {
             expect(doesFileExist).toHaveBeenCalledOnce();
             expect(getBufferHash).not.toHaveBeenCalled();
             expect(installPackagesAndWriteHash).not.toHaveBeenCalled();
+            expect(restart).not.toHaveBeenCalled();
         });
 
         it('exits early if signal aborted', async () => {
@@ -84,6 +89,7 @@ describe('utils', () => {
             expect(fs.readFile).toHaveBeenCalledTimes(2);
             expect(getBufferHash).not.toHaveBeenCalled();
             expect(installPackagesAndWriteHash).not.toHaveBeenCalled();
+            expect(restart).not.toHaveBeenCalled();
         });
 
         it('exits early if hash identical', async () => {
@@ -94,22 +100,25 @@ describe('utils', () => {
             expect(fs.readFile).toHaveBeenCalledTimes(2);
             expect(getBufferHash).toHaveBeenCalledWith('lock-content');
             expect(installPackagesAndWriteHash).not.toHaveBeenCalled();
+            expect(restart).not.toHaveBeenCalled();
         });
 
         it('will setup watcher', async () => {
             vi.mocked(fs.readFile).mockResolvedValueOnce('some-hash').mockResolvedValueOnce('lock-content');
-            await utils.handlePackageLockUpdates();
+            await utils.handlePackageLockUpdates(devServer);
             expect(doesFileExist).toHaveBeenCalledOnce();
             expect(getBufferHash).toHaveBeenCalledOnce();
             expect(installPackagesAndWriteHash).toHaveBeenCalledOnce();
+            expect(restart).toHaveBeenCalledWith(true);
             expect(setupWatcher).toHaveBeenCalledOnce();
+            expect(setupWatcher).toHaveBeenCalledWith(devServer);
         });
     });
 
     describe('setupWatcher', () => {
         const pkgLockPath = './file-path-somewhere.json';
-        let ac: AbortController;
         let utils: Utils;
+        let ac: AbortController;
         let handleWatchEvent: MockInstance<Parameters<typeof Utils.prototype['handleWatchEvent']>, ReturnType<typeof Utils.prototype['handleWatchEvent']>>;
 
         beforeEach(() => {
@@ -134,7 +143,9 @@ describe('utils', () => {
         });
 
         it('attempts to handle the event', async () => {
+            const restart = vi.fn();
             const { watch, readFile } = fs;
+            const devServer = { restart } as unknown as ViteDevServer;
             const event = { eventType: 'change', filename: 'whatever.ext' };
             function* mock() {
                 yield event;
@@ -142,9 +153,9 @@ describe('utils', () => {
             if (vi.isMockFunction(watch)) watch.mockReturnValue(mock());
             if (vi.isMockFunction(readFile)) readFile.mockResolvedValue('some-hash');
 
-            const result = await utils.setupWatcher();
+            const result = await utils.setupWatcher(devServer);
             expect(result).toBeUndefined();
-            expect(handleWatchEvent).toBeCalledWith(event);
+            expect(handleWatchEvent).toBeCalledWith(event, devServer);
         });
     });
 
@@ -152,6 +163,7 @@ describe('utils', () => {
         let utils: Utils;
         let getBufferHash: MockInstance<Parameters<typeof Utils.prototype['getBufferHash']>, ReturnType<typeof Utils.prototype['getBufferHash']>>;
         let installPackagesAndWriteHash: MockInstance<Parameters<typeof Utils.prototype['installPackagesAndWriteHash']>, ReturnType<typeof Utils.prototype['installPackagesAndWriteHash']>>;
+
         beforeEach(() => {
             utils = new Utils({ ...baseOptions });
             getBufferHash = vi.spyOn(utils, 'getBufferHash');
@@ -201,6 +213,18 @@ describe('utils', () => {
             expect(readFile).toHaveBeenCalledTimes(2);
             expect(getBufferHash).toHaveBeenCalled();
             expect(installPackagesAndWriteHash).toHaveBeenCalledOnce();
+        });
+
+        it('restarts server for changed file', async () => {
+            const restart = vi.fn();
+            const devServer = { restart } as unknown as ViteDevServer;
+
+            vi.mocked(readFile).mockResolvedValueOnce('some-hash').mockResolvedValueOnce('another-hash');
+            await utils.handleWatchEvent({ eventType: 'change', filename: pkgLockPath }, devServer);
+            expect(readFile).toHaveBeenCalledTimes(2);
+            expect(getBufferHash).toHaveBeenCalled();
+            expect(installPackagesAndWriteHash).toHaveBeenCalledOnce();
+            expect(restart).toHaveBeenCalledWith(true);
         });
     });
 
