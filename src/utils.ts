@@ -5,7 +5,7 @@ import { exec } from 'node:child_process';
 import { resolve, dirname } from 'node:path';
 import { watch, access, mkdir, writeFile, readFile } from 'node:fs/promises';
 import type { FileChangeInfo } from 'node:fs/promises';
-import type { Logger } from 'vite';
+import type { Logger, ViteDevServer } from 'vite';
 
 const execAsync = promisify(exec);
 export type SupportedPkgManager = typeof Utils.SUPPORTED_PKG_MANAGERS[number];
@@ -49,7 +49,7 @@ export class Utils {
         }
     }
 
-    public async handlePackageLockUpdates() {
+    public async handlePackageLockUpdates(devServer?: ViteDevServer) {
         const { cacheDir, pkgLockPath, pkgManager, signal, installOnCacheNotFound, logger } = this.options;
 
         const hashFile = resolve(cacheDir, Utils.HASH_FILE_NAME);
@@ -66,6 +66,7 @@ export class Utils {
                 signal,
                 skipInstall: !installOnCacheNotFound,
             });
+            await devServer?.restart(true);
         } else {
             const [prevHash, pkgLock] = await Promise.all([
                 readFile(hashFile, { signal, encoding: 'utf-8' }),
@@ -78,17 +79,18 @@ export class Utils {
                 return;
             }
             await this.installPackagesAndWriteHash({ hash: newHash, hashFile, pkgManager, signal });
+            await devServer?.restart(true);
         }
 
-        return this.setupWatcher();
+        return this.setupWatcher(devServer);
     }
 
-    public async setupWatcher() {
+    public async setupWatcher(devServer?: ViteDevServer) {
         const { pkgLockPath, signal } = this.options;
         try {
             this.#watcher = watch(pkgLockPath, { signal });
             for await (const event of this.#watcher) {
-                await this.handleWatchEvent(event);
+                await this.handleWatchEvent(event, devServer);
             }
         } catch (err) {
             if ('name' in err && err instanceof Error && err.name === 'AbortError') {
@@ -98,7 +100,7 @@ export class Utils {
         }
     }
 
-    public async handleWatchEvent({ eventType, filename }: FileChangeInfo<string>) {
+    public async handleWatchEvent({ eventType, filename }: FileChangeInfo<string>, devServer?: ViteDevServer) {
         if (eventType !== 'change' || !filename) {
             return;
         }
@@ -114,6 +116,7 @@ export class Utils {
             return;
         }
         await this.installPackagesAndWriteHash({ hash: newHash, hashFile, pkgManager, signal });
+        await devServer?.restart(true);
     }
 
     public async installPackagesAndWriteHash({ hash, hashFile, pkgManager, signal, skipInstall }: { hash: string; hashFile: string; pkgManager: SupportedPkgManager; signal: AbortSignal; skipInstall?: boolean }) {

@@ -1,4 +1,4 @@
-import type { Logger, Plugin } from 'vite';
+import type { Logger, Plugin, ViteDevServer } from 'vite';
 import { Utils, type SupportedPkgManager } from './utils';
 
 interface Options {
@@ -29,6 +29,7 @@ export function autoUpdatePackages(options: Options): Plugin<never> {
     let isBuild: boolean;
     let cacheDir: string;
     let pkgLockPath: string;
+    let server: ViteDevServer;
 
     const { pkgManager = 'npm' } = options;
 
@@ -51,6 +52,9 @@ export function autoUpdatePackages(options: Options): Plugin<never> {
             }
             pkgLockPath = path;
         },
+        configureServer(s) {
+            server = s;
+        },
         buildStart() {
             if (!isBuild || !pkgLockPath) {
                 return;
@@ -60,7 +64,7 @@ export function autoUpdatePackages(options: Options): Plugin<never> {
                 logger.error('Using an invalid package manager.', { error: new Error(`Unsupported package manager: ${pkgManager}`), timestamp: true });
             }
             const utils = new Utils({ logger, cacheDir, pkgLockPath, pkgManager, signal: ac.signal, installOnCacheNotFound: options.installOnCacheNotFound });
-            utils.handlePackageLockUpdates().catch(err => logger.error('', { error: err as Error, timestamp: true }));
+            utils.handlePackageLockUpdates(server).catch(err => logger.error('', { error: err as Error, timestamp: true }));
         },
         buildEnd() {
             ac.abort();
