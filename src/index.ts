@@ -24,20 +24,19 @@ const ac = new AbortController();
  * This is can be useful when working in a team, in a case where the dependencies are updated by other team members, and the changes were pulled in from the remote repository while the dev server is running.
  * @param options Customization options for the plugin.
  */
-export function autoUpdatePackages(options: Options): Plugin<never> {
-    let logger: Logger;
-    let isBuild: boolean;
-    let cacheDir: string;
-    let pkgLockPath: string;
-    let server: ViteDevServer;
+export function autoUpdatePackages(options: Options = {}): Plugin<never> {
+    let logger: Logger | undefined;
+    let isBuild: boolean | undefined;
+    let cacheDir: string | undefined;
+    let pkgLockPath: string | undefined;
+    let server: ViteDevServer | undefined;
 
     const { pkgManager = 'npm' } = options;
 
     return {
         name: 'auto-update-packages',
         async configResolved(config) {
-            ({ logger } = config);
-            ({ cacheDir } = config);
+            ({ logger, cacheDir } = config);
             isBuild = config.command === 'build';
             const resolver = config.createResolver({ extensions: ['.json'] });
 
@@ -56,15 +55,16 @@ export function autoUpdatePackages(options: Options): Plugin<never> {
             server = s;
         },
         buildStart() {
-            if (!isBuild || !pkgLockPath) {
+            if (!isBuild || !pkgLockPath || !logger || !cacheDir) {
                 return;
             }
             const { pkgManager = 'npm' } = options;
             if (!Utils.SUPPORTED_PKG_MANAGERS.includes(pkgManager)) {
                 logger.error('Using an invalid package manager.', { error: new Error(`Unsupported package manager: ${pkgManager}`), timestamp: true });
+                return;
             }
             const utils = new Utils({ logger, cacheDir, pkgLockPath, pkgManager, signal: ac.signal, installOnCacheNotFound: options.installOnCacheNotFound });
-            utils.handlePackageLockUpdates(server).catch(err => logger.error('', { error: err as Error, timestamp: true }));
+            utils.handlePackageLockUpdates(server).catch(err => logger!.error('', { error: err as Error, timestamp: true }));
         },
         buildEnd() {
             ac.abort();
